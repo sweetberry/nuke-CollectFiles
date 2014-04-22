@@ -67,14 +67,9 @@ def collectReadNode(node, collectFolderPath):
     startFrame = node['first'].value()
     endFrame = node['last'].value()
 
-    # split the long file name with path to its subsections
-    splitFileNameFull = os.path.split(fileNameFull)
-    fileNameShort = splitFileNameFull[1]
-    # pathName = splitFileNameFull[0]
-    splitFileName = os.path.splitext(fileNameShort)
-    fileName = splitFileName[0]
-    # fileExtension = splitFileName[1]
-    # folderName = fileName.split("%")[0].rstrip('._')
+    fileNameWithExt = os.path.split(fileNameFull)[1]
+    fileNameWithoutExt = os.path.splitext(fileNameWithExt)[0]
+    # folderName = fileNameWithoutExt.split("%")[0].rstrip('._')
     folderName = node['name'].getValue()
 
     footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
@@ -88,9 +83,9 @@ def collectReadNode(node, collectFolderPath):
         if os.path.lexists(fileNameFull % i):
             shutil.copy(fileNameFull % i, footageFolderPath)
         else:
-            nuke.message(fileName % i + "is missing")
+            nuke.message(fileNameWithoutExt % i + "is missing")
 
-    dstFilePathValue = os.path.join(footageFolderPath, fileNameShort)
+    dstFilePathValue = os.path.join(footageFolderPath, fileNameWithExt)
     node['file'].setValue(getRelPath(dstFilePathValue))
     return
 
@@ -130,6 +125,7 @@ def main():
 
     nuke.message("complete. \n\n( ´ー｀)y-~~")
     return
+
 
 if __name__ == '__main__':
     main()
