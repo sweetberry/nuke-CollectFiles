@@ -1,14 +1,12 @@
 # _*_ coding: utf-8 _*
 """
 nukeでファイル収集。
-Readノードのみ対応。
-LUTや3D関係のノードWriteの読み込みも未対応
 """
 __author__ = 'hiroyuki okuno'
 __copyright__ = 'Copyright 2014, sweetberryStudio'
 __license__ = "GPL"
 __email__ = 'pixel@sweetberry.com'
-__version__ = '0.1'
+__version__ = '0.5'
 
 import os.path
 import nuke
@@ -52,20 +50,53 @@ def makeFolder(path):
     return path
 
 
-def changeFileKnobToFullPath(node):
+# noinspection PyArgumentList
+def getNodeListToCollect():
+    nodeKnobDictionary = [
+        ("GenerateLUT", "file"),
+        ("MatchGrade", "outfile"),
+        ("OCIOCDLTransform", "file"),
+        ("OCIOFileTransform", "file"),
+        ("Vectorfield", "vfield_file"),
+        ("Denoise", "analysisFile"),
+        ("Axis2", "file"),
+        ("Camera2", "file"),
+        ("Light2", "file"),
+        ("*ReadGeo2", "file"),
+        ("*WriteGeo", "file"),
+        ("*ParticleCache", "file"),
+        ("DeepRead", "file"),
+        ("DeepWrite", "file"),
+        ("AudioRead", "file"),
+        ("BlinkScript", "kernelSourceFile"),
+        ("Read", "file"),
+        ("Write", "file")
+    ]
+    nodeList = []
+    for dic in nodeKnobDictionary:
+        for node in nuke.allNodes(dic[0]):
+            nodeList.append((node, dic[1]))
+
+    return nodeList
+
+
+def changeFileKnobToFullPath(nodeTuple):
     try:
-        if node['file']:
-            node['file'].setValue(getAbsPath(node['file'].value()))
+        if not nodeTuple[0][nodeTuple[1]] == "":
+            nodeTuple[0][nodeTuple[1]].setValue(getAbsPath(nodeTuple[0][nodeTuple[1]].value()))
     finally:
         return
 
 
-def collectReadNode(node, collectFolderPath):
-    if node.Class() != "Read":
-        # nuke.message(node['name'].getValue() + ":This only works Read node!")
+def collectReadNode(nodeTuple, collectFolderPath):
+    node = nodeTuple[0]
+    if node.Class() != "Read" and node.Class() != "DeepRead":
         return
 
     fileNameFull = getAbsPath(node['file'].value())
+    if fileNameFull == "":
+        return
+
     startFrame = node['first'].value()
     endFrame = node['last'].value()
 
@@ -73,7 +104,6 @@ def collectReadNode(node, collectFolderPath):
     fileNameWithoutExt = os.path.splitext(fileNameWithExt)[0]
     # folderName = fileNameWithoutExt.split("%")[0].rstrip('._')
     folderName = node['name'].getValue()
-
     footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
 
     progressBar = nuke.ProgressTask("copy Files >> " + folderName)
@@ -85,22 +115,78 @@ def collectReadNode(node, collectFolderPath):
         if os.path.lexists(fileNameFull % i):
             shutil.copy(fileNameFull % i, footageFolderPath)
         else:
-            nuke.message(fileNameWithoutExt % i + "is missing")
+            nuke.warning(fileNameWithoutExt % i + " is missing")
 
     dstFilePathValue = os.path.join(footageFolderPath, fileNameWithExt)
     node['file'].setValue(getRelPath(dstFilePathValue))
     return
 
 
+def collectWriteNode(nodeTuple, collectFolderPath):
+    node = nodeTuple[0]
+    if node.Class() != "Write" and node.Class() != "DeepWrite":
+        return
+
+    fileNameFull = getAbsPath(node['file'].value())
+    if fileNameFull == "":
+        return
+
+    fileNameWithExt = os.path.split(fileNameFull)[1]
+    fileNameWithoutExt = os.path.splitext(fileNameWithExt)[0]
+    folderName = node['name'].getValue()
+    footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
+
+    progressBar = nuke.ProgressTask("copy Files >> " + folderName)
+    if os.path.lexists(os.path.split(fileNameFull)[0]) and not len(os.listdir(os.path.split(fileNameFull)[0])) == 0:
+        filesListInFolder = os.listdir(os.path.split(fileNameFull)[0])
+        for i in range(0, len(filesListInFolder)):
+            if progressBar.isCancelled():
+                break
+            progressBar.setProgress(getIntPercent(i * 1.0 / len(filesListInFolder)))
+
+            # ファイル名が適合するかチェック
+            if fileNameWithoutExt.split("%")[0].rstrip('._') in filesListInFolder[i]:
+                shutil.copy(os.path.join(os.path.split(fileNameFull)[0],filesListInFolder[i]), footageFolderPath)
+
+    dstFilePathValue = os.path.join(footageFolderPath, fileNameWithExt)
+    node['file'].setValue(getRelPath(dstFilePathValue))
+    return
+
+
+def collectNode(nodeTuple, collectFolderPath):
+    if nodeTuple[0].Class() == "Read" or nodeTuple[0].Class() == "DeepRead":
+        collectReadNode(nodeTuple, collectFolderPath)
+        return
+    if nodeTuple[0].Class() == "Write" or nodeTuple[0].Class() == "DeepWrite":
+        collectWriteNode(nodeTuple, collectFolderPath)
+        return
+    fileNameFull = getAbsPath(nodeTuple[0][nodeTuple[1]].value())
+    if fileNameFull == "":
+        return
+
+    folderName = nodeTuple[0]['name'].getValue()
+    fileNameWithExt = os.path.split(fileNameFull)[1]
+    # fileNameWithoutExt = os.path.splitext(fileNameWithExt)[0]
+
+    if os.path.isdir(fileNameFull):
+        nuke.warning(fileNameWithExt + " is directory")
+    elif os.path.lexists(fileNameFull):
+        footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
+        shutil.copy(fileNameFull, footageFolderPath)
+        dstFilePathValue = os.path.join(footageFolderPath, fileNameWithExt)
+        nodeTuple[0][nodeTuple[1]].setValue(getRelPath(dstFilePathValue))
+    else:
+        nuke.warning(fileNameWithExt + " is missing")
+
+    return
+
+
 def main():
     collectFolderPath = makeCollectFolder()
-
-    # noinspection PyArgumentList
-    allNodes = nuke.allNodes()
-
+    targetNodeTuples = getNodeListToCollect()
     # fileKnobがあるノードをすべてフルパスに変更
-    for node in allNodes:
-        changeFileKnobToFullPath(node)
+    for nodeTuple in targetNodeTuples:
+        changeFileKnobToFullPath(nodeTuple)
 
     # collectFolderPathにnkを新規保存
     splitScriptName = os.path.splitext(os.path.split(nuke.Root()['name'].getValue())[1])
@@ -110,11 +196,11 @@ def main():
 
     # ファイルコピー＆パス書き換え
     progressBar = nuke.ProgressTask("collecting...")
-    for node in allNodes:
+    for nodeTuple in targetNodeTuples:
+        progressBar.setProgress(getIntPercent((targetNodeTuples.index(nodeTuple) + 1.0) / len(targetNodeTuples)))
         if progressBar.isCancelled():
             break
-        collectReadNode(node, collectFolderPath)
-        progressBar.setProgress(getIntPercent((allNodes.index(node) + 1.0) / len(allNodes)))
+        collectNode(nodeTuple, collectFolderPath)
 
     # project_directoryを設定
     nuke.Root()['project_directory'].setValue("[python {nuke.script_directory()}]")
