@@ -53,9 +53,11 @@ def makeFolder(path):
 
 
 def changeFileKnobToFullPath(node):
-    if node['file']:
-        node['file'].setValue(getAbsPath(node['file'].value()))
-    return
+    try:
+        if node['file']:
+            node['file'].setValue(getAbsPath(node['file'].value()))
+    finally:
+        return
 
 
 def collectReadNode(node, collectFolderPath):
