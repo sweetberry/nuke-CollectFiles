@@ -24,6 +24,9 @@ toolbar = nuke.toolbar("Nodes")
 ssMenu = toolbar.addMenu("Sweetberry", icon="sweetberry.png")
 
 ssMenu.addCommand('CollectFiles','collectFiles.main()')
+ssMenu.addCommand('AbsPath >> RelPath','collectFiles.absToRel()')
+ssMenu.addCommand('RelPath >> AbsPath','collectFiles.relToAbs()')
+
 
 #/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ```

@@ -13,17 +13,60 @@ import nuke
 import shutil
 import math
 
+nodeFileKnobDictionary = [
+    ("GenerateLUT", "file"),
+    ("MatchGrade", "outfile"),
+    ("OCIOCDLTransform", "file"),
+    ("OCIOFileTransform", "file"),
+    ("Vectorfield", "vfield_file"),
+    ("Denoise", "analysisFile"),
+    ("Axis2", "file"),
+    ("Camera2", "file"),
+    ("Light2", "file"),
+    ("*ReadGeo2", "file"),
+    ("*WriteGeo", "file"),
+    ("*ParticleCache", "file"),
+    ("DeepRead", "file"),
+    ("DeepWrite", "file"),
+    ("AudioRead", "file"),
+    ("BlinkScript", "kernelSourceFile"),
+    ("Read", "file"),
+    ("Write", "file")
+]
+
+
+def isProjectDirectory():
+    if getProjectDirectory() == "":
+        nuke.message("\nproject directory is undefined.\n\n(´･ω･`)ｼｮﾎﾞｰﾝ")
+        return False
+    else:
+        return True
+
+
+def isSelectedNodes():
+    # noinspection PyArgumentList
+    selectedNodes = nuke.selectedNodes()
+    if len(selectedNodes) == 0:
+        nuke.message("\nplease select the node for which you want to change file path \n\n( ﾟДﾟ)")
+        return False
+    else:
+        return True
+
+
+def getProjectDirectory():
+    return nuke.Root()['project_directory'].getValue()
+
 
 def getAbsPath(src):
     if os.path.isabs(src):
         return src
     else:
-        return os.path.normpath(os.path.join(nuke.script_directory(), src))
+        return os.path.normpath(os.path.join(getProjectDirectory(), src))
 
 
 def getRelPath(src):
     if os.path.isabs(src):
-        return os.path.relpath(src, nuke.script_directory())
+        return os.path.relpath(src, getProjectDirectory())
     else:
         return src
 
@@ -52,28 +95,8 @@ def makeFolder(path):
 
 # noinspection PyArgumentList
 def getNodeListToCollect():
-    nodeKnobDictionary = [
-        ("GenerateLUT", "file"),
-        ("MatchGrade", "outfile"),
-        ("OCIOCDLTransform", "file"),
-        ("OCIOFileTransform", "file"),
-        ("Vectorfield", "vfield_file"),
-        ("Denoise", "analysisFile"),
-        ("Axis2", "file"),
-        ("Camera2", "file"),
-        ("Light2", "file"),
-        ("*ReadGeo2", "file"),
-        ("*WriteGeo", "file"),
-        ("*ParticleCache", "file"),
-        ("DeepRead", "file"),
-        ("DeepWrite", "file"),
-        ("AudioRead", "file"),
-        ("BlinkScript", "kernelSourceFile"),
-        ("Read", "file"),
-        ("Write", "file")
-    ]
     nodeList = []
-    for dic in nodeKnobDictionary:
+    for dic in nodeFileKnobDictionary:
         for node in nuke.allNodes(dic[0]):
             nodeList.append((node, dic[1]))
 
@@ -181,6 +204,46 @@ def collectNode(nodeTuple, collectFolderPath):
     return
 
 
+def absToRel():
+    count = 0
+    nuke.Undo.begin("AbsPath >> RelPath")
+    if isProjectDirectory() and isSelectedNodes():
+        for dictRow in nodeFileKnobDictionary:
+            selectedNodes = nuke.selectedNodes(dictRow[0])
+            for node in selectedNodes:
+                knobPath = node[dictRow[1]].value()
+                convertedPath = getRelPath(knobPath)
+                if not knobPath == "" and not knobPath == convertedPath:
+                    count += 1
+                    node[dictRow[1]].setValue(convertedPath)
+        if count == 0:
+            nuke.message("\nThere is no node to be converted. \n\n(´･ω･`)ｼｮﾎﾞｰﾝ")
+        else:
+            nuke.message("\nconverted " + str(count) + " nodes \n\n  ヽ( ﾟ∀ﾟ)ﾉ")
+    nuke.Undo.end()
+    return
+
+
+def relToAbs():
+    count = 0
+    nuke.Undo.begin("RelPath >> AbsPath")
+    if isProjectDirectory() and isSelectedNodes():
+        for dictRow in nodeFileKnobDictionary:
+            selectedNodes = nuke.selectedNodes(dictRow[0])
+            for node in selectedNodes:
+                knobPath = node[dictRow[1]].value()
+                convertedPath = getAbsPath(knobPath)
+                if not knobPath == "" and not knobPath == convertedPath:
+                    count += 1
+                    node[dictRow[1]].setValue(convertedPath)
+        if count == 0:
+            nuke.message("\nThere is no node to be converted. \n\n(´･ω･`)ｼｮﾎﾞｰﾝ")
+        else:
+            nuke.message("\nconverted " + str(count) + " nodes \n\n  ヽ( ﾟ∀ﾟ)ﾉ")
+    nuke.Undo.end()
+    return
+
+
 def main():
     collectFolderPath = makeCollectFolder()
     targetNodeTuples = getNodeListToCollect()
@@ -213,7 +276,6 @@ def main():
 
     nuke.message("complete. \n\n( ´ー｀)y-~~")
     return
-
 
 if __name__ == '__main__':
     main()
