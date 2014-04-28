@@ -54,7 +54,10 @@ def isSelectedNodes():
 
 
 def getProjectDirectory():
-    return nuke.Root()['project_directory'].getValue()
+    tempDir = nuke.Root()['project_directory'].getValue()
+    if tempDir == "[python {nuke.script_directory()}]":
+        tempDir = nuke.script_directory()
+    return tempDir
 
 
 def getAbsPath(src):
@@ -93,26 +96,29 @@ def makeFolder(path):
     return path
 
 
-# noinspection PyArgumentList
-def getNodeListToCollect():
-    nodeList = []
-    for dic in nodeFileKnobDictionary:
-        for node in nuke.allNodes(dic[0]):
-            nodeList.append((node, dic[1]))
-
-    return nodeList
-
-
-def changeFileKnobToFullPath(nodeTuple):
+def changeFileKnobToAbsPath(node, knobName):
     try:
-        if not nodeTuple[0][nodeTuple[1]] == "":
-            nodeTuple[0][nodeTuple[1]].setValue(getAbsPath(nodeTuple[0][nodeTuple[1]].value()))
+        if not node[knobName] == "":
+            node[knobName].setValue(getAbsPath(node[knobName].value()))
     finally:
         return
 
 
-def collectReadNode(nodeTuple, collectFolderPath):
-    node = nodeTuple[0]
+def isNodeClassOf(node, *classNames):
+    for className in classNames:
+        if node.Class() == className:
+            return True
+    return False
+
+
+def isSequencePath(pathString):
+    fileName = os.path.split(pathString)[1]
+    if not fileName.find("%") == -1:
+        return True
+    return False
+
+
+def collectReadNode(node, collectFolderPath):
     if node.Class() != "Read" and node.Class() != "DeepRead":
         return
 
@@ -123,30 +129,16 @@ def collectReadNode(nodeTuple, collectFolderPath):
     startFrame = node['first'].value()
     endFrame = node['last'].value()
 
-    fileNameWithExt = os.path.split(fileNameFull)[1]
-    fileNameWithoutExt = os.path.splitext(fileNameWithExt)[0]
-    # folderName = fileNameWithoutExt.split("%")[0].rstrip('._')
     folderName = node['name'].getValue()
     footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
 
-    progressBar = nuke.ProgressTask("copy Files >> " + folderName)
-
-    for i in range(startFrame, endFrame + 1):
-        if progressBar.isCancelled():
-            break
-        progressBar.setProgress(getIntPercent(i * 1.0 / endFrame))
-        if os.path.lexists(fileNameFull % i):
-            shutil.copy(fileNameFull % i, footageFolderPath)
-        else:
-            nuke.warning(fileNameWithoutExt % i + " is missing")
-
-    dstFilePathValue = os.path.join(footageFolderPath, fileNameWithExt)
-    node['file'].setValue(getRelPath(dstFilePathValue))
+    dstFilePathValue = copySequenceFiles(fileNameFull, footageFolderPath, folderName, startFrame, endFrame)
+    if dstFilePathValue:
+        node['file'].setValue(getRelPath(dstFilePathValue))
     return
 
 
-def collectWriteNode(nodeTuple, collectFolderPath):
-    node = nodeTuple[0]
+def collectWriteNode(node, collectFolderPath):
     if node.Class() != "Write" and node.Class() != "DeepWrite":
         return
 
@@ -154,50 +146,85 @@ def collectWriteNode(nodeTuple, collectFolderPath):
     if fileNameFull == "":
         return
 
-    fileNameWithExt = os.path.split(fileNameFull)[1]
-    fileNameWithoutExt = os.path.splitext(fileNameWithExt)[0]
     folderName = node['name'].getValue()
     footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
 
-    progressBar = nuke.ProgressTask("copy Files >> " + folderName)
-    if os.path.lexists(os.path.split(fileNameFull)[0]) and not len(os.listdir(os.path.split(fileNameFull)[0])) == 0:
-        filesListInFolder = os.listdir(os.path.split(fileNameFull)[0])
-        for i in range(0, len(filesListInFolder)):
-            if progressBar.isCancelled():
-                break
-            progressBar.setProgress(getIntPercent(i * 1.0 / len(filesListInFolder)))
-
-            # ファイル名が適合するかチェック
-            if fileNameWithoutExt.split("%")[0].rstrip('._') in filesListInFolder[i]:
-                shutil.copy(os.path.join(os.path.split(fileNameFull)[0],filesListInFolder[i]), footageFolderPath)
-
-    dstFilePathValue = os.path.join(footageFolderPath, fileNameWithExt)
-    node['file'].setValue(getRelPath(dstFilePathValue))
+    dstFilePathValue = copySequenceFiles(fileNameFull, footageFolderPath, folderName)
+    if dstFilePathValue:
+        node['file'].setValue(getRelPath(dstFilePathValue))
     return
 
 
+def copySequenceFiles(secPath, dstPath, folderName=None, startFrame=None, endFrame=None):
+    if not os.path.lexists(dstPath):
+        return False
+    # if not isSequencePath(secPath):
+    #     return False
+    parentDirPath = os.path.split(secPath)[0]
+    if not os.path.lexists(parentDirPath):
+        return False
+    srcFileName = os.path.split(secPath)[1]
+    if not folderName:
+        folderName = srcFileName.split("%")[0].rstrip('._')
+    siblingFilesList = os.listdir(os.path.split(secPath)[0])
+
+    # srcのフォルダ内のファイルリストをsrcのパス名でフィルタします。（ファイル名が適合するかチェック）
+    filteredSiblingFilesList = []
+    srcFileNameWithOutExt = os.path.splitext(srcFileName)[0]
+    for siblingFileName in siblingFilesList:
+        if srcFileNameWithOutExt.split("%")[0] in os.path.splitext(siblingFileName)[0]:
+            filteredSiblingFilesList.append(siblingFileName)
+
+    progressBar = nuke.ProgressTask("copy Files >> " + folderName)
+
+    if startFrame is None:
+        start = 0
+    else:
+        start = startFrame
+
+    if endFrame is None:
+        end = len(filteredSiblingFilesList)
+    else:
+        end = endFrame + 1
+
+    for i in range(start, end):
+        if progressBar.isCancelled():
+            break
+        progressBar.setProgress(getIntPercent(i * 1.0 / end))
+        if startFrame is None and endFrame is None:
+            targetFileName = filteredSiblingFilesList[i]
+        elif isSequencePath(secPath):
+            targetFileName = srcFileName % i
+        else:
+            targetFileName = srcFileName
+        targetPath = os.path.join(parentDirPath, targetFileName)
+        if os.path.isfile(targetPath):
+            shutil.copy(targetPath, dstPath)
+    return os.path.join(dstPath, srcFileName)
+
+
 def collectNode(nodeTuple, collectFolderPath):
-    if nodeTuple[0].Class() == "Read" or nodeTuple[0].Class() == "DeepRead":
-        collectReadNode(nodeTuple, collectFolderPath)
+    node = nodeTuple[0]
+    knobName = nodeTuple[1]
+    if isNodeClassOf(node, "Read", "DeepRead"):
+        collectReadNode(node, collectFolderPath)
         return
-    if nodeTuple[0].Class() == "Write" or nodeTuple[0].Class() == "DeepWrite":
-        collectWriteNode(nodeTuple, collectFolderPath)
+    if isNodeClassOf(node, "Write", "DeepWrite"):
+        collectWriteNode(node, collectFolderPath)
         return
-    fileNameFull = getAbsPath(nodeTuple[0][nodeTuple[1]].value())
-    if fileNameFull == "":
+    if node[knobName].value() == "":
         return
+    fileNameFullPath = getAbsPath(node[knobName].value())
+    folderName = node['name'].getValue()
+    fileNameWithExt = os.path.split(fileNameFullPath)[1]
 
-    folderName = nodeTuple[0]['name'].getValue()
-    fileNameWithExt = os.path.split(fileNameFull)[1]
-    # fileNameWithoutExt = os.path.splitext(fileNameWithExt)[0]
-
-    if os.path.isdir(fileNameFull):
+    if os.path.isdir(fileNameFullPath):
         nuke.warning(fileNameWithExt + " is directory")
-    elif os.path.lexists(fileNameFull):
+    elif os.path.lexists(fileNameFullPath):
         footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
-        shutil.copy(fileNameFull, footageFolderPath)
+        shutil.copy(fileNameFullPath, footageFolderPath)
         dstFilePathValue = os.path.join(footageFolderPath, fileNameWithExt)
-        nodeTuple[0][nodeTuple[1]].setValue(getRelPath(dstFilePathValue))
+        node[knobName].setValue(getRelPath(dstFilePathValue))
     else:
         nuke.warning(fileNameWithExt + " is missing")
 
@@ -245,17 +272,28 @@ def relToAbs():
 
 
 def main():
+    # noinspection PyArgumentList
+    def getNodeTuplesToCollectByAll():
+        nodeList = []
+        for dic in nodeFileKnobDictionary:
+            for node in nuke.allNodes(dic[0]):
+                nodeList.append((node, dic[1]))
+        return nodeList
+
     collectFolderPath = makeCollectFolder()
-    targetNodeTuples = getNodeListToCollect()
+    targetNodeTuples = getNodeTuplesToCollectByAll()
     # fileKnobがあるノードをすべてフルパスに変更
     for nodeTuple in targetNodeTuples:
-        changeFileKnobToFullPath(nodeTuple)
+        changeFileKnobToAbsPath(nodeTuple[0], nodeTuple[1])
 
     # collectFolderPathにnkを新規保存
     splitScriptName = os.path.splitext(os.path.split(nuke.Root()['name'].getValue())[1])
     newScriptName = splitScriptName[0] + "_collected" + splitScriptName[1]
     newScriptPath = os.path.join(collectFolderPath, newScriptName)
     nuke.scriptSaveAs(newScriptPath)
+
+    # project_directoryを設定
+    nuke.Root()['project_directory'].setValue("[python {nuke.script_directory()}]")
 
     # ファイルコピー＆パス書き換え
     progressBar = nuke.ProgressTask("collecting...")
@@ -265,9 +303,6 @@ def main():
             break
         collectNode(nodeTuple, collectFolderPath)
 
-    # project_directoryを設定
-    nuke.Root()['project_directory'].setValue("[python {nuke.script_directory()}]")
-
     # nkを保存
     nuke.scriptSave()
 
@@ -276,6 +311,7 @@ def main():
 
     nuke.message("complete. \n\n( ´ー｀)y-~~")
     return
+
 
 if __name__ == '__main__':
     main()
