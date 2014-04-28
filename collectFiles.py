@@ -6,7 +6,7 @@ __author__ = 'hiroyuki okuno'
 __copyright__ = 'Copyright 2014, sweetberryStudio'
 __license__ = "GPL"
 __email__ = 'pixel@sweetberry.com'
-__version__ = '0.5'
+__version__ = '0.7'
 
 import os.path
 import nuke
@@ -121,17 +121,13 @@ def isSequencePath(pathString):
 def collectReadNode(node, collectFolderPath):
     if node.Class() != "Read" and node.Class() != "DeepRead":
         return
-
     fileNameFull = getAbsPath(node['file'].value())
     if fileNameFull == "":
         return
-
     startFrame = node['first'].value()
     endFrame = node['last'].value()
-
     folderName = node['name'].getValue()
     footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
-
     dstFilePathValue = copySequenceFiles(fileNameFull, footageFolderPath, folderName, startFrame, endFrame)
     if dstFilePathValue:
         node['file'].setValue(getRelPath(dstFilePathValue))
@@ -141,14 +137,11 @@ def collectReadNode(node, collectFolderPath):
 def collectWriteNode(node, collectFolderPath):
     if node.Class() != "Write" and node.Class() != "DeepWrite":
         return
-
     fileNameFull = getAbsPath(node['file'].value())
     if fileNameFull == "":
         return
-
     folderName = node['name'].getValue()
     footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
-
     dstFilePathValue = copySequenceFiles(fileNameFull, footageFolderPath, folderName)
     if dstFilePathValue:
         node['file'].setValue(getRelPath(dstFilePathValue))
@@ -166,7 +159,7 @@ def copySequenceFiles(secPath, dstPath, folderName=None, startFrame=None, endFra
     srcFileName = os.path.split(secPath)[1]
     if not folderName:
         folderName = srcFileName.split("%")[0].rstrip('._')
-    siblingFilesList = os.listdir(os.path.split(secPath)[0])
+    siblingFilesList = os.listdir(parentDirPath)
 
     # srcのフォルダ内のファイルリストをsrcのパス名でフィルタします。（ファイル名が適合するかチェック）
     filteredSiblingFilesList = []
@@ -176,17 +169,14 @@ def copySequenceFiles(secPath, dstPath, folderName=None, startFrame=None, endFra
             filteredSiblingFilesList.append(siblingFileName)
 
     progressBar = nuke.ProgressTask("copy Files >> " + folderName)
-
     if startFrame is None:
         start = 0
     else:
         start = startFrame
-
     if endFrame is None:
         end = len(filteredSiblingFilesList)
     else:
         end = endFrame + 1
-
     for i in range(start, end):
         if progressBar.isCancelled():
             break
@@ -218,16 +208,22 @@ def collectNode(nodeTuple, collectFolderPath):
     folderName = node['name'].getValue()
     fileNameWithExt = os.path.split(fileNameFullPath)[1]
 
-    if os.path.isdir(fileNameFullPath):
-        nuke.warning(fileNameWithExt + " is directory")
-    elif os.path.lexists(fileNameFullPath):
+    if isSequencePath(fileNameWithExt):
         footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
-        shutil.copy(fileNameFullPath, footageFolderPath)
-        dstFilePathValue = os.path.join(footageFolderPath, fileNameWithExt)
-        node[knobName].setValue(getRelPath(dstFilePathValue))
+        dstFilePathValue = copySequenceFiles(fileNameFullPath, footageFolderPath, folderName)
+        if dstFilePathValue:
+            node[knobName].setValue(getRelPath(dstFilePathValue))
+        return
     else:
-        nuke.warning(fileNameWithExt + " is missing")
-
+        if os.path.isdir(fileNameFullPath):
+            nuke.warning(fileNameWithExt + " is directory")
+        elif os.path.lexists(fileNameFullPath):
+            footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
+            shutil.copy(fileNameFullPath, footageFolderPath)
+            dstFilePathValue = os.path.join(footageFolderPath, fileNameWithExt)
+            node[knobName].setValue(getRelPath(dstFilePathValue))
+        else:
+            nuke.warning(fileNameWithExt + " is missing")
     return
 
 
@@ -279,7 +275,6 @@ def main():
             for node in nuke.allNodes(dic[0]):
                 nodeList.append((node, dic[1]))
         return nodeList
-
     collectFolderPath = makeCollectFolder()
     targetNodeTuples = getNodeTuplesToCollectByAll()
     # fileKnobがあるノードをすべてフルパスに変更
@@ -308,10 +303,8 @@ def main():
 
     # progressBar掃除
     del progressBar
-
     nuke.message("complete. \n\n( ´ー｀)y-~~")
     return
-
 
 if __name__ == '__main__':
     main()
