@@ -128,7 +128,7 @@ def collectReadNode(node, collectFolderPath):
     endFrame = node['last'].value()
     folderName = node['name'].getValue()
     footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
-    dstFilePathValue = copySequenceFiles(fileNameFull, footageFolderPath, folderName, startFrame, endFrame)
+    dstFilePathValue = copyFiles(fileNameFull, footageFolderPath, folderName, startFrame, endFrame)
     if dstFilePathValue:
         node['file'].setValue(getRelPath(dstFilePathValue))
     return
@@ -142,13 +142,13 @@ def collectWriteNode(node, collectFolderPath):
         return
     folderName = node['name'].getValue()
     footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
-    dstFilePathValue = copySequenceFiles(fileNameFull, footageFolderPath, folderName)
+    dstFilePathValue = copyFiles(fileNameFull, footageFolderPath, folderName)
     if dstFilePathValue:
         node['file'].setValue(getRelPath(dstFilePathValue))
     return
 
 
-def copySequenceFiles(secPath, dstPath, folderName=None, startFrame=None, endFrame=None):
+def copyFiles(secPath, dstPath, folderName=None, startFrame=None, endFrame=None):
     if not os.path.lexists(dstPath):
         return False
     # if not isSequencePath(secPath):
@@ -165,7 +165,8 @@ def copySequenceFiles(secPath, dstPath, folderName=None, startFrame=None, endFra
     filteredSiblingFilesList = []
     srcFileNameWithOutExt = os.path.splitext(srcFileName)[0]
     for siblingFileName in siblingFilesList:
-        if srcFileNameWithOutExt.split("%")[0] in os.path.splitext(siblingFileName)[0]:
+        splitFilename = srcFileNameWithOutExt.split("%")
+        if splitFilename[0] in os.path.splitext(siblingFileName)[0] and isSequencePath(secPath):
             filteredSiblingFilesList.append(siblingFileName)
 
     progressBar = nuke.ProgressTask("copy Files >> " + folderName)
@@ -210,7 +211,7 @@ def collectNode(nodeTuple, collectFolderPath):
 
     if isSequencePath(fileNameWithExt):
         footageFolderPath = makeFolder(os.path.join(collectFolderPath, folderName))
-        dstFilePathValue = copySequenceFiles(fileNameFullPath, footageFolderPath, folderName)
+        dstFilePathValue = copyFiles(fileNameFullPath, footageFolderPath, folderName)
         if dstFilePathValue:
             node[knobName].setValue(getRelPath(dstFilePathValue))
         return
