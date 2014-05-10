@@ -6,7 +6,7 @@ __author__ = 'hiroyuki okuno'
 __copyright__ = 'Copyright 2014, sweetberryStudio'
 __license__ = "GPL"
 __email__ = 'pixel@sweetberry.com'
-__version__ = '0.7'
+__version__ = '0.8'
 
 import os.path
 import nuke
@@ -36,6 +36,11 @@ nodeFileKnobDictionary = [
 
 
 def isProjectDirectory():
+    """
+    project directory　が設定されているかを返す
+
+    :return: boolean
+    """
     if getProjectDirectory() == "":
         nuke.message("\nproject directory is undefined.\n\n(´･ω･`)ｼｮﾎﾞｰﾝ")
         return False
@@ -44,6 +49,11 @@ def isProjectDirectory():
 
 
 def isSelectedNodes():
+    """
+    ノードが選択されているかを返す
+
+    :return: boolean
+    """
     # noinspection PyArgumentList
     selectedNodes = nuke.selectedNodes()
     if len(selectedNodes) == 0:
@@ -54,6 +64,11 @@ def isSelectedNodes():
 
 
 def getProjectDirectory():
+    """
+    project directory　に設定されているパスを文字列で返す。
+
+    :return: string
+    """
     tempDir = nuke.Root()['project_directory'].getValue()
     if tempDir == "[python {nuke.script_directory()}]":
         tempDir = nuke.script_directory()
@@ -61,6 +76,12 @@ def getProjectDirectory():
 
 
 def getAbsPath(src):
+    """
+    パス文字列を絶対パスに変換して返す
+
+    :param src: string
+    :return: string
+    """
     if os.path.isabs(src):
         return src
     else:
@@ -68,6 +89,12 @@ def getAbsPath(src):
 
 
 def getRelPath(src):
+    """
+    パス文字列を相対パスに変換して返す
+
+    :param src: string
+    :return: string
+    """
     if os.path.isabs(src):
         return os.path.relpath(src, getProjectDirectory())
     else:
@@ -75,36 +102,41 @@ def getRelPath(src):
 
 
 def getIntPercent(fValue):
-    dst = int(math.ceil(fValue * 100))
-    return dst
+    """
+    floatを整数のパーセント値に変換して返す[0.275 >> 28]
 
-
-def makeCollectFolder():
-    split = os.path.splitext(nuke.scriptName())
-    dstPath = os.path.join(nuke.script_directory(), split[0] + "_Collected")
-    return makeFolder(dstPath)
+    :param fValue: float
+    :return: int
+    """
+    return int(math.ceil(fValue * 100))
 
 
 def makeFolder(path):
-    tempPath = path
+    """
+    フォルダ作成、同名フォルダが指定されていたらパディング。
+    作成後のパスを返す
+
+    :param path:
+    :return:dstPath
+    """
+    dstPath = path
     pad = 2
-    while os.path.lexists(path):
-        path = tempPath + "_" + str(pad)
+    while os.path.lexists(dstPath):
+        dstPath = path + "_" + str(pad)
         pad += 1
 
-    os.mkdir(path)
-    return path
-
-
-def changeFileKnobToAbsPath(node, knobName):
-    try:
-        if not node[knobName] == "":
-            node[knobName].setValue(getAbsPath(node[knobName].value()))
-    finally:
-        return
+    os.mkdir(dstPath)
+    return dstPath
 
 
 def isNodeClassOf(node, *classNames):
+    """
+    Nodeのクラスをチェックします。
+
+    :param node:
+    :param classNames:
+    :return: boolean
+    """
     for className in classNames:
         if node.Class() == className:
             return True
@@ -112,6 +144,12 @@ def isNodeClassOf(node, *classNames):
 
 
 def isSequencePath(pathString):
+    """
+    与えられたパスが連番をさすかどうかを返す。
+
+    :param pathString:
+    :return: boolean
+    """
     fileName = os.path.split(pathString)[1]
     if not fileName.find("%") == -1:
         return True
@@ -165,8 +203,7 @@ def copyFiles(secPath, dstPath, folderName=None, startFrame=None, endFrame=None)
     filteredSiblingFilesList = []
     srcFileNameWithOutExt = os.path.splitext(srcFileName)[0]
     for siblingFileName in siblingFilesList:
-        splitFilename = srcFileNameWithOutExt.split("%")
-        if splitFilename[0] in os.path.splitext(siblingFileName)[0] and isSequencePath(secPath):
+        if srcFileNameWithOutExt.split("%")[0] in os.path.splitext(siblingFileName)[0] and isSequencePath(secPath):
             filteredSiblingFilesList.append(siblingFileName)
 
     progressBar = nuke.ProgressTask("copy Files >> " + folderName)
@@ -269,6 +306,18 @@ def relToAbs():
 
 
 def main():
+    def changeFileKnobToAbsPath(node, knobName):
+        try:
+            if not node[knobName] == "":
+                node[knobName].setValue(getAbsPath(node[knobName].value()))
+        finally:
+            return
+
+    def makeCollectFolder():
+        split = os.path.splitext(nuke.scriptName())
+        dstPath = os.path.join(nuke.script_directory(), split[0] + "_Collected")
+        return makeFolder(dstPath)
+
     # noinspection PyArgumentList
     def getNodeTuplesToCollectByAll():
         nodeList = []
@@ -276,6 +325,7 @@ def main():
             for node in nuke.allNodes(dic[0]):
                 nodeList.append((node, dic[1]))
         return nodeList
+
     collectFolderPath = makeCollectFolder()
     targetNodeTuples = getNodeTuplesToCollectByAll()
     # fileKnobがあるノードをすべてフルパスに変更
