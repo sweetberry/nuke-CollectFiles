@@ -1,17 +1,14 @@
-# How to Install
+nuke-CollectFiles
+====
 
----
+## Install
 
-### Copy files    
- * collectFiles.py
- * sweetberry.png    
+- Copy files    
+ * ```collectFiles.py```  
+ * ```sweetberry.png```   
+into your `.nuke` folder.
 
-into your .nuke folder.    
-
----
-
-### Open your menu.py file, and type this:
-
+- Open your `menu.py` file, and type this:
 ```python
 # CollectFiles  ////////////////////////////////////////////////////////////////////////////////////////
 
@@ -31,8 +28,15 @@ ssMenu.addCommand('RelPath >> AbsPath','collectFiles.relToAbs()')
 #/////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ```
 
----
+- restart nuke.  
 
-### restart nuke.
+- enjoy!
 
-# enjoy!.
+## Licence
+
+MIT
+
+## Author
+
+[sweetberry](https://github.com/sweetberry)
+
